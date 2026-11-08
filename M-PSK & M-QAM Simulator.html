@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>M-PSK &amp; M-QAM Simulator</title>
+<style>
+:root {
+  --bg:#f7f7f5; --panel:#ffffff; --border:#dcdad3; --text:#1a1a1a; --sub:#5a5a55;
+  --accent:#185fa5; --good:#3b6d11; --bad:#a32d2d;
+  box-sizing:border-box; padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { --bg:#17171a; --panel:#232326; --border:#3a3a3d; --text:#eee; --sub:#aaa;
+  --accent:#5aa4ec; --good:#97c459; --bad:#f09595; }
+}
+:root[data-theme="dark"] { --bg:#17171a; --panel:#232326; --border:#3a3a3d; --text:#eee; --sub:#aaa;
+  --accent:#5aa4ec; --good:#97c459; --bad:#f09595; }
+html{scroll-padding-top:env(safe-area-inset-top,0px);}
+*{box-sizing:border-box;}
+body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;line-height:1.5;}
+.wrap{max-width:980px;margin:0 auto;padding:1.5rem 1rem 3rem;}
+h1{font-size:1.3rem;margin:0 0 .25rem;}
+h2{font-size:1.05rem;margin:1.6rem 0 .5rem;color:var(--accent);}
+p.sub{color:var(--sub);margin:0 0 1rem;font-size:.9rem;}
+.card{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:1rem;margin-bottom:1rem;}
+.row{display:flex;flex-wrap:wrap;gap:.75rem;align-items:flex-end;margin-bottom:.5rem;}
+.field{display:flex;flex-direction:column;font-size:.8rem;color:var(--sub);gap:.25rem;}
+.field select,.field input[type=number]{padding:.35rem .4rem;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);width:130px;}
+.field input[type=range]{width:150px;}
+button{background:var(--accent);color:#fff;border:none;padding:.5rem .9rem;border-radius:6px;font-size:.85rem;cursor:pointer;}
+.chartbox{position:relative;height:250px;margin:.5rem 0 1rem;}
+.grid2{display:grid;grid-template-columns:repeat(2,1fr);gap:.8rem;}
+@media(max-width:700px){.grid2{grid-template-columns:1fr;}}
+.lbl{font-size:.78rem;color:var(--sub);margin:.2rem 0 .2rem;text-align:center;}
+canvas.reg{width:100%;max-width:330px;aspect-ratio:1/1;display:block;margin:0 auto;border:1px solid var(--border);border-radius:6px;}
+table{width:100%;border-collapse:collapse;font-size:.8rem;margin-top:.5rem;}
+th,td{border-bottom:1px solid var(--border);padding:.3rem .4rem;text-align:center;}
+th{color:var(--sub);font-weight:500;}
+td.ok{color:var(--good);font-weight:600;}
+td.no{color:var(--bad);font-weight:600;}
+.pill{display:inline-block;padding:.15rem .55rem;border-radius:20px;font-size:.75rem;font-weight:600;margin-right:.3rem;}
+.pill.good{background:rgba(59,109,17,.15);color:var(--good);}
+.pill.bad{background:rgba(163,45,45,.15);color:var(--bad);}
+.note{font-size:.85rem;color:var(--sub);border-left:3px solid var(--accent);padding:.4rem .7rem;background:rgba(24,95,165,.06);border-radius:0 6px 6px 0;margin:.5rem 0;}
+.interp{font-size:.88rem;margin-top:.4rem;}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>Experiment 11 — M-PSK &amp; M-QAM</h1>
+<p class="sub">QPSK, 8-PSK, 16-QAM and 64-QAM with average symbol energy normalized to E<sub>s</sub> = 1, Gray and natural-binary labelings, and minimum-Euclidean-distance detection over complex AWGN. Constellation snapshots use E<sub>s</sub>/N<sub>0</sub>; BER/SER curves use E<sub>b</sub>/N<sub>0</sub> = E<sub>s</sub>/(N<sub>0</sub>·log<sub>2</sub>M).</p>
+
+<div class="card">
+  <h2 style="margin-top:0">1 · Parameters</h2>
+  <div class="row">
+    <div class="field"><label>Modulation (received plots)</label>
+      <select id="mod"><option value="0">QPSK</option><option value="1">8-PSK</option><option value="2" selected>16-QAM</option><option value="3">64-QAM</option></select></div>
+    <div class="field"><label>Labeling</label>
+      <select id="map"><option value="gray" selected>Gray</option><option value="bin">Natural binary</option></select></div>
+    <div class="field"><label>E<sub>s</sub>/N<sub>0</sub> for decision regions (dB)</label><input id="esn0" type="range" min="0" max="25" step="1" value="15"><span id="esn0Val">15</span></div>
+  </div>
+  <div class="row">
+    <div class="field"><label>Symbols per BER point</label><input id="nsym" type="number" value="20000" min="2000" max="100000" step="2000"></div>
+    <div class="field"><label>E<sub>b</sub>/N<sub>0</sub> for efficiency study (dB)</label><input id="ebn0" type="range" min="2" max="20" step="1" value="10"><span id="ebn0Val">10</span></div>
+    <div class="field"><label>Roll-off α (for η)</label><input id="alpha" type="range" min="0" max="1" step="0.05" value="0"><span id="alphaVal">0.00</span></div>
+    <div class="field"><label>Target BER</label><select id="tber"><option value="0.01">1e-2</option><option value="0.001" selected>1e-3</option><option value="0.0001">1e-4</option><option value="0.00001">1e-5</option></select></div>
+    <button id="runAll">Run simulation</button>
+  </div>
+  <div class="note">Expected: with E<sub>s</sub> fixed, packing more points in the same energy shrinks the minimum distance — d<sub>min</sub> = 2 sin(π/M) for M-PSK and √(6/(M−1)) for square M-QAM — so higher-order schemes need more E<sub>b</sub>/N<sub>0</sub> for the same BER but carry more bits per symbol (spectral efficiency log<sub>2</sub>M). 64-QAM clouds at 5 dB overlap completely; at 20 dB they separate. Gray labeling makes adjacent-symbol errors cost one bit, so its BER should approach SER/log<sub>2</sub>M, while binary labeling is noticeably worse for M ≥ 8.</div>
+</div>
+
+<div class="card">
+  <h2 style="margin-top:0">2 · Ideal normalized constellations and bit labels</h2>
+  <div class="grid2">
+    <div><div class="lbl">QPSK</div><div class="chartbox"><canvas id="chI0" role="img" aria-label="Ideal QPSK constellation with bit labels">QPSK.</canvas></div></div>
+    <div><div class="lbl">8-PSK</div><div class="chartbox"><canvas id="chI1" role="img" aria-label="Ideal 8-PSK constellation with bit labels">8-PSK.</canvas></div></div>
+    <div><div class="lbl">16-QAM</div><div class="chartbox"><canvas id="chI2" role="img" aria-label="Ideal 16-QAM constellation with bit labels">16-QAM.</canvas></div></div>
+    <div><div class="lbl">64-QAM</div><div class="chartbox"><canvas id="chI3" role="img" aria-label="Ideal 64-QAM constellation with bit labels">64-QAM.</canvas></div></div>
+  </div>
+  <div class="interp" id="idealInterp"></div>
+</div>
+
+<div class="card">
+  <h2 style="margin-top:0">3 · Received constellations at E<sub>s</sub>/N<sub>0</sub> = 0, 5, 10 and 20 dB</h2>
+  <div class="grid2">
+    <div><div class="lbl" id="rl0"></div><div class="chartbox"><canvas id="chR0" role="img" aria-label="Received constellation at 0 dB">0 dB.</canvas></div></div>
+    <div><div class="lbl" id="rl1"></div><div class="chartbox"><canvas id="chR1" role="img" aria-label="Received constellation at 5 dB">5 dB.</canvas></div></div>
+    <div><div class="lbl" id="rl2"></div><div class="chartbox"><canvas id="chR2" role="img" aria-label="Received constellation at 10 dB">10 dB.</canvas></div></div>
+    <div><div class="lbl" id="rl3"></div><div class="chartbox"><canvas id="chR3" role="img" aria-label="Received constellation at 20 dB">20 dB.</canvas></div></div>
+  </div>
+  <div class="interp" id="recvInterp"></div>
+</div>
+
+<div class="card">
+  <h2 style="margin-top:0">4 · Minimum-distance decision regions</h2>
+  <div class="grid2">
+    <div><div class="lbl">QPSK</div><canvas class="reg" id="rg0" width="330" height="330"></canvas></div>
+    <div><div class="lbl">8-PSK</div><canvas class="reg" id="rg1" width="330" height="330"></canvas></div>
+    <div><div class="lbl">16-QAM</div><canvas class="reg" id="rg2" width="330" height="330"></canvas></div>
+    <div><div class="lbl">64-QAM</div><canvas class="reg" id="rg3" width="330" height="330"></canvas></div>
+  </div>
+  <div class="interp" id="regInterp"></div>
+</div>
+
+<div class="card">
+  <h2 style="margin-top:0">5 · BER and SER versus E<sub>b</sub>/N<sub>0</sub></h2>
+  <div class="lbl">BER — markers: simulated Gray; hollow dashed: simulated binary; thin line: Gray theory ≈ SER/log₂M</div>
+  <div class="chartbox" style="height:290px"><canvas id="chBER" role="img" aria-label="Bit error rate versus Eb/N0 for QPSK, 8-PSK, 16-QAM and 64-QAM, Gray and binary labeling, with theory">BER curves.</canvas></div>
+  <div class="lbl">SER — markers: simulated; thin line: theory</div>
+  <div class="chartbox" style="height:290px"><canvas id="chSER" role="img" aria-label="Symbol error rate versus Eb/N0 for the four modulations with theory">SER curves.</canvas></div>
+  <div class="interp" id="berInterp"></div>
+</div>
+
+<div class="card">
+  <h2 style="margin-top:0">6 · BER versus spectral efficiency</h2>
+  <div id="effTable"></div>
+  <div class="grid2">
+    <div><div class="lbl">BER at the chosen E<sub>b</sub>/N<sub>0</sub> vs spectral efficiency η</div><div class="chartbox"><canvas id="chEff" role="img" aria-label="BER at fixed Eb/N0 versus spectral efficiency">BER vs efficiency.</canvas></div></div>
+    <div><div class="lbl">E<sub>b</sub>/N<sub>0</sub> needed for the target BER vs η (with Shannon limit)</div><div class="chartbox"><canvas id="chReq" role="img" aria-label="Required Eb/N0 for the target BER versus spectral efficiency, with the Shannon limit curve">Required Eb/N0.</canvas></div></div>
+  </div>
+  <div class="interp" id="effInterp"></div>
+</div>
+
+<div class="card">
+  <h2 style="margin-top:0">7 · Mandatory validation — average energy before and after normalization</h2>
+  <p class="sub" style="margin-top:-.3rem">Raw constellations: M-PSK on radius 2; square QAM on odd integers (±1, ±3, …). Energies are averaged numerically over all points, then each set is scaled by 1/√E<sub>raw</sub>.</p>
+  <div id="valTable"></div>
+  <div class="interp" id="valInterp"></div>
+</div>
+
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script>
+const MODS = [ {name:'QPSK', type:'psk', M:4, col:'#2a78d6'}, {name:'8-PSK', type:'psk', M:8, col:'#1baf7a'},
+               {name:'16-QAM', type:'qam', M:16, col:'#eb6834'}, {name:'64-QAM', type:'qam', M:64, col:'#6250d6'} ];
+
+function isDark(){ return matchMedia('(prefers-color-scheme: dark)').matches; }
+const ink = () => isDark() ? '#eee' : '#1a1a1a';
+const gridc = () => isDark() ? '#3a3a3d' : '#e1e0d9';
+let charts = {};
+function upsertChart(id, config){ if(charts[id]) charts[id].destroy(); charts[id] = new Chart(document.getElementById(id), config); }
+function baseOpts(xl, yl, o){
+  o = o || {};
+  const sc = { x:{ type:'linear', ticks:{color:ink()}, grid:{color:gridc()}, title:{display:!!xl,text:xl,color:ink()} },
+               y:{ ticks:{color:ink()}, grid:{color:gridc()}, title:{display:!!yl,text:yl,color:ink()} } };
+  if(o.xmin!==undefined){ sc.x.min=o.xmin; sc.x.max=o.xmax; }
+  if(o.ymin!==undefined){ sc.y.min=o.ymin; sc.y.max=o.ymax; }
+  if(o.ylog){ sc.y.type='logarithmic'; sc.y.min=o.ylogmin||1e-4; sc.y.max=1; }
+  const leg = { display:o.legend!==false, labels:{ color:ink(), boxWidth:10, font:{size:10} } };
+  if(o.legendFilter) leg.labels.filter = o.legendFilter;
+  return { responsive:true, maintainAspectRatio:false, animation:false, scales:sc, plugins:{ legend:leg } };
+}
+const labelPlugin = { id:'ptlabels', afterDatasetsDraw(chart){
+  const ctx = chart.ctx;
+  chart.data.datasets.forEach((ds,i)=>{
+    if(!ds.ptLabels) return;
+    const meta = chart.getDatasetMeta(i);
+    meta.data.forEach((pt,j)=>{ ctx.save(); ctx.fillStyle = ink(); ctx.font = (ds.labelSize||10)+'px sans-serif'; ctx.textAlign='center'; ctx.fillText(ds.ptLabels[j], pt.x, pt.y - 8); ctx.restore(); });
+  });
+} };
+function gauss(){ let u=0; while(u===0) u=Math.random(); return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*Math.random()); }
+function erfc(x){ const z=Math.abs(x), t=1/(1+0.5*z);
+  const r=t*Math.exp(-z*z-1.26551223+t*(1.00002368+t*(0.37409196+t*(0.09678418+t*(-0.18628806+t*(0.27886807+t*(-1.13520398+t*(1.48851587+t*(-0.82215223+t*0.17087277)))))))));
+  return x>=0 ? r : 2-r; }
+function Q(x){ return 0.5*erfc(x/Math.SQRT2); }
+function pts(xs, ys){ return xs.map((x,i)=>({x:x, y:ys[i]})); }
+function pop(x){ let c=0; while(x){ c += x&1; x >>= 1; } return c; }
+function gray(k){ return k ^ (k>>1); }
+function bstr(v, n){ let s=v.toString(2); while(s.length<n) s='0'+s; return s; }
+
+// ---------- Mapper: raw constellation with Gray and natural-binary labels ----------
+function buildRaw(def){
+  const M = def.M, out = [];
+  if(def.type === 'psk'){
+    const off = (M===4) ? Math.PI/4 : 0, R = 2;
+    for(let k=0;k<M;k++){ const a = off + 2*Math.PI*k/M; out.push({ re:R*Math.cos(a), im:R*Math.sin(a), gray:gray(k), bin:k }); }
+  } else {
+    const L = Math.round(Math.sqrt(M)), m = Math.round(Math.log2(L));
+    for(let i=0;i<L;i++) for(let q=0;q<L;q++) out.push({ re:2*i-(L-1), im:2*q-(L-1), gray:(gray(i)<<m)|gray(q), bin:(i<<m)|q });
+  }
+  return out;
+}
+function avgEnergy(p){ let s=0; for(const x of p) s += x.re*x.re + x.im*x.im; return s/p.length; }
+function normalize(p){ const e = avgEnergy(p), g = 1/Math.sqrt(e); return p.map(x=>({ re:x.re*g, im:x.im*g, gray:x.gray, bin:x.bin })); }
+function minDist(p){ let d=Infinity; for(let i=0;i<p.length;i++) for(let j=i+1;j<p.length;j++){ const t=Math.hypot(p[i].re-p[j].re, p[i].im-p[j].im); if(t<d) d=t; } return d; }
+const NORM = MODS.map(m=>normalize(buildRaw(m)));
+
+// ---------- Minimum-distance demapper ----------
+function detect(p, rr, ri){
+  let best=0, bd=Infinity;
+  for(let j=0;j<p.length;j++){ const dx=rr-p[j].re, dy=ri-p[j].im, d=dx*dx+dy*dy; if(d<bd){ bd=d; best=j; } }
+  return best;
+}
+// Simulate n symbols at Es/N0 (dB). Es = 1, so N0 = 1/gamma_s and sigma per dimension = sqrt(N0/2).
+function sim(mi, esn0dB, n, keepN){
+  const p = NORM[mi], M = p.length, k = Math.log2(M), sg = Math.sqrt(0.5/Math.pow(10, esn0dB/10));
+  let se = 0, beG = 0, beB = 0; const K = { re:[], im:[], tx:[], rx:[] };
+  for(let i=0;i<n;i++){
+    const s = Math.floor(Math.random()*M);
+    const rr = p[s].re + sg*gauss(), ri = p[s].im + sg*gauss(), d = detect(p, rr, ri);
+    if(d!==s){ se++; beG += pop(p[s].gray ^ p[d].gray); beB += pop(p[s].bin ^ p[d].bin); }
+    if(i<(keepN||0)){ K.re.push(rr); K.im.push(ri); K.tx.push(s); K.rx.push(d); }
+  }
+  return { ser:se/n, berG:beG/(n*k), berB:beB/(n*k), keep:K };
+}
+
+// ---------- Theory ----------
+function theorySER(mi, gs){
+  const M = MODS[mi].M;
+  if(MODS[mi].type==='psk'){ if(M===4){ const q=Q(Math.sqrt(gs)); return 1-(1-q)*(1-q); } return Math.min(1, 2*Q(Math.sqrt(2*gs)*Math.sin(Math.PI/M))); }
+  const pv = 2*(1-1/Math.sqrt(M))*Q(Math.sqrt(3*gs/(M-1))); return 1-(1-pv)*(1-pv);
+}
+function theoryBER(mi, gb){ const k = Math.log2(MODS[mi].M); return theorySER(mi, gb*k)/k; }
+function reqEbN0(mi, target){            // dB, bisection on the Gray BER approximation
+  let lo=-5, hi=40;
+  for(let it=0; it<60; it++){ const mid=(lo+hi)/2; if(theoryBER(mi, Math.pow(10,mid/10)) > target) lo=mid; else hi=mid; }
+  return (lo+hi)/2;
+}
+
+// ---------- UI ----------
+function getP(){ return { mod:+document.getElementById('mod').value, map:document.getElementById('map').value,
+  es:+document.getElementById('esn0').value, n:Math.max(2000,+document.getElementById('nsym').value||20000),
+  eb:+document.getElementById('ebn0').value, alpha:+document.getElementById('alpha').value, tber:+document.getElementById('tber').value }; }
+document.getElementById('esn0').addEventListener('input', e=>{ document.getElementById('esn0Val').textContent=e.target.value; });
+document.getElementById('ebn0').addEventListener('input', e=>{ document.getElementById('ebn0Val').textContent=e.target.value; });
+document.getElementById('alpha').addEventListener('input', e=>{ document.getElementById('alphaVal').textContent=(+e.target.value).toFixed(2); });
+document.getElementById('runAll').onclick = ()=>{ runAll(); };
+
+// ---------- Section 2: ideal constellations ----------
+function plotIdeal(p){
+  MODS.forEach((m,mi)=>{
+    const pt = NORM[mi], k = Math.log2(m.M), lim = mi===0?1.3:(mi===1?1.4:1.45);
+    const labels = pt.map(x=>bstr(p.map==='gray'?x.gray:x.bin, k));
+    upsertChart('chI'+mi, { type:'scatter', data:{ datasets:[ { label:'Ideal points', data:pts(pt.map(x=>x.re), pt.map(x=>x.im)), backgroundColor:m.col, pointRadius:m.M>16?3:5, ptLabels:labels, labelSize:m.M>16?7:(m.M>8?9:11) } ] },
+      options: baseOpts('In-phase','Quadrature',{xmin:-lim,xmax:lim,ymin:-lim,ymax:lim,legend:false}), plugins:[labelPlugin] });
+  });
+  const dm = NORM.map(minDist);
+  document.getElementById('idealInterp').innerHTML = `<b>Observation (${p.map==='gray'?'Gray':'natural binary'} labels):</b> normalized minimum distances are ${MODS.map((m,i)=>m.name+' '+dm[i].toFixed(3)).join(', ')}. PSK points share one circle (constant envelope); QAM points lie on a square grid with several energy levels. `+
+    (p.map==='gray' ? 'In every Gray-labeled set, nearest neighbours differ in exactly one bit.' : 'With binary labels some nearest neighbours differ in two or more bits (e.g. 01↔10 in QPSK, 011↔100 in 8-PSK), which is what inflates binary-mapped BER.');
+}
+
+// ---------- Section 3: received constellations ----------
+function plotRecv(p){
+  const m = MODS[p.mod], pt = NORM[p.mod], snrs = [0,5,10,20], lim = p.mod===0?1.9:(p.mod===1?2:2.1), out=[];
+  snrs.forEach((s,i)=>{
+    const r = sim(p.mod, s, 6000, 1500), K = r.keep; out.push(r.ser);
+    document.getElementById('rl'+i).textContent = `${m.name}, E_s/N_0 = ${s} dB — measured SER ${r.ser.toFixed(4)}`;
+    upsertChart('chR'+i, { type:'scatter', data:{ datasets:[
+      {label:'Received', data:pts(K.re,K.im), backgroundColor:m.col+'66', pointRadius:1.8},
+      {label:'Ideal', data:pts(pt.map(x=>x.re), pt.map(x=>x.im)), backgroundColor:'#e34948', pointRadius:3}
+    ]}, options: baseOpts('In-phase','Quadrature',{xmin:-lim,xmax:lim,ymin:-lim,ymax:lim,legend:false}) });
+  });
+  document.getElementById('recvInterp').innerHTML = `<b>Observation:</b> ${m.name} measured SER = ${out.map((v,i)=>v.toFixed(3)+' @ '+snrs[i]+' dB').join(', ')}. The noise cloud radius is fixed by N<sub>0</sub>, not by the constellation, so the clouds become distinguishable only once σ falls well below d<sub>min</sub>/2 = ${(minDist(pt)/2).toFixed(3)}. `+
+    (p.mod===3 ? '64-QAM is a single blob at 0 and 5 dB and only resolves into 64 clusters near 20 dB.' : (p.mod===0 ? 'QPSK already shows four separated clusters by about 10 dB.' : 'Try 64-QAM to see how much more SNR a denser constellation needs.'));
+}
+
+// ---------- Section 4: decision regions ----------
+function drawRegions(mi, esn0dB){
+  const cv = document.getElementById('rg'+mi), ctx = cv.getContext('2d'), p = NORM[mi], W = cv.width, lim = 1.6, step = 3;
+  for(let y=0;y<W;y+=step) for(let x=0;x<W;x+=step){
+    const re = ((x+step/2)/W*2-1)*lim, im = (1-(y+step/2)/W*2)*lim, j = detect(p, re, im);
+    ctx.fillStyle = `hsl(${Math.round(j*360/p.length*7)%360}, 55%, ${isDark()?32:80}%)`; ctx.fillRect(x, y, step, step);
+  }
+  ctx.strokeStyle = isDark() ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.3)'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(0,W/2); ctx.lineTo(W,W/2); ctx.moveTo(W/2,0); ctx.lineTo(W/2,W); ctx.stroke();
+  const sg = Math.sqrt(0.5/Math.pow(10, esn0dB/10));
+  ctx.fillStyle = isDark() ? 'rgba(255,255,255,0.75)' : 'rgba(0,0,0,0.55)';
+  for(let i=0;i<250;i++){ const s = p[Math.floor(Math.random()*p.length)], re = s.re+sg*gauss(), im = s.im+sg*gauss();
+    ctx.beginPath(); ctx.arc((re/lim+1)/2*W, (1-im/lim)/2*W, 1.6, 0, 6.2832); ctx.fill(); }
+  ctx.fillStyle = '#e34948';
+  p.forEach(s=>{ ctx.beginPath(); ctx.arc((s.re/lim+1)/2*W, (1-s.im/lim)/2*W, 3.2, 0, 6.2832); ctx.fill(); });
+}
+function plotRegions(p){
+  for(let i=0;i<4;i++) drawRegions(i, p.es);
+  document.getElementById('regInterp').innerHTML = `<b>Observation:</b> each colored cell is the set of received points closest (in Euclidean distance) to one ideal point (red). PSK regions are wedges that extend to infinity, so a large noise excursion in <em>any</em> direction beyond the wedge angle π/M is an error; QAM inner regions are small squares of side d<sub>min</sub> while edge/corner regions are open, which is why corner points are the most robust and inner points the most error-prone. Dark dots are ${250} noisy samples at E<sub>s</sub>/N<sub>0</sub> = ${p.es} dB.`;
+}
+
+// ---------- Section 5: BER / SER curves ----------
+function clean(a){ return a.map(v=> v>0 ? v : null); }
+let curveCache = null;
+function plotCurves(p){
+  const xs=[0,2,4,6,8,10,12,14,16,18,20], gx=[]; for(let s=0;s<=20.01;s+=0.5) gx.push(s);
+  const R = MODS.map((m,mi)=> xs.map(x=> sim(mi, x+10*Math.log10(Math.log2(m.M)), p.n, 0)));
+  curveCache = R;
+  const berDs = [], serDs = [];
+  MODS.forEach((m,mi)=>{
+    berDs.push({label:`${m.name} Gray sim`, data:pts(xs,clean(R[mi].map(r=>r.berG))), borderColor:m.col, backgroundColor:m.col, showLine:false, pointRadius:3.5});
+    berDs.push({label:`${m.name} binary sim`, data:pts(xs,clean(R[mi].map(r=>r.berB))), borderColor:m.col, backgroundColor:'rgba(0,0,0,0)', borderDash:[4,3], borderWidth:1.2, pointRadius:3, pointStyle:'rectRot'});
+    berDs.push({label:`${m.name} theory`, data:pts(gx,gx.map(x=>theoryBER(mi,Math.pow(10,x/10)))), borderColor:m.col, borderWidth:1, pointRadius:0});
+    serDs.push({label:`${m.name} sim`, data:pts(xs,clean(R[mi].map(r=>r.ser))), borderColor:m.col, backgroundColor:m.col, showLine:false, pointRadius:3.5});
+    serDs.push({label:`${m.name} theory`, data:pts(gx,gx.map(x=>theorySER(mi,Math.pow(10,x/10)*Math.log2(m.M)))), borderColor:m.col, borderWidth:1, pointRadius:0});
+  });
+  upsertChart('chBER', { type:'line', data:{ datasets:berDs }, options: baseOpts('Eb/N0 (dB)','BER',{ylog:true,ylogmin:1e-4,xmin:0,xmax:20,legendFilter:(it)=>/Gray sim/.test(it.text)}) });
+  upsertChart('chSER', { type:'line', data:{ datasets:serDs }, options: baseOpts('Eb/N0 (dB)','SER',{ylog:true,ylogmin:1e-4,xmin:0,xmax:20,legendFilter:(it)=>/ sim/.test(it.text)}) });
+  const i10 = xs.indexOf(10);
+  const row = MODS.map((m,mi)=>`${m.name}: Gray ${R[mi][i10].berG.toExponential(1)} vs binary ${R[mi][i10].berB.toExponential(1)}`).join('; ');
+  document.getElementById('berInterp').innerHTML = `<b>Observation (E<sub>b</sub>/N<sub>0</sub> = 10 dB):</b> ${row}. Higher M moves the whole curve to the right: reaching the same BER costs roughly 3–4 dB more E<sub>b</sub>/N<sub>0</sub> going from QPSK to 16-QAM and about 4 dB more going on to 64-QAM. 8-PSK needs only about 0.5 dB less E<sub>b</sub>/N<sub>0</sub> than 16-QAM while carrying one bit fewer per symbol, showing that PSK uses its energy inefficiently once M exceeds 8 (all points sit on one circle, so d<sub>min</sub> collapses). Binary labeling is slightly worse for QPSK and clearly worse for 8-PSK, 16-QAM and 64-QAM. Gray theory (SER/log₂M) agrees with simulation once the SER is below ~10<sup>−1</sup>; at very low SNR the high-SNR approximation overestimates the error rate, which is the expected discrepancy (diagnosed by comparing SER theory with SER simulation in the lower chart). Points with zero errors are omitted on the log axis.`;
+}
+
+// ---------- Section 6: spectral efficiency ----------
+function plotEff(p){
+  const eta = MODS.map(m=>Math.log2(m.M)/(1+p.alpha));
+  const res = MODS.map((m,mi)=> sim(mi, p.eb+10*Math.log10(Math.log2(m.M)), p.n, 0));
+  const th = MODS.map((m,mi)=> theoryBER(mi, Math.pow(10,p.eb/10)));
+  let rows = `<table><tr><th>Modulation</th><th>bits/symbol</th><th>η = log₂M/(1+α) [bit/s/Hz]</th><th>SER sim</th><th>SER theory</th><th>BER Gray sim</th><th>BER binary sim</th><th>BER Gray theory</th><th>E<sub>b</sub>/N<sub>0</sub> for target (dB)</th></tr>`;
+  const req = MODS.map((m,mi)=>reqEbN0(mi,p.tber));
+  MODS.forEach((m,mi)=>{ rows += `<tr><td>${m.name}</td><td>${Math.log2(m.M)}</td><td>${eta[mi].toFixed(2)}</td><td>${res[mi].ser.toExponential(2)}</td><td>${theorySER(mi,Math.pow(10,p.eb/10)*Math.log2(m.M)).toExponential(2)}</td><td>${res[mi].berG.toExponential(2)}</td><td>${res[mi].berB.toExponential(2)}</td><td>${th[mi].toExponential(2)}</td><td>${req[mi].toFixed(1)}</td></tr>`; });
+  rows += `</table>`;
+  document.getElementById('effTable').innerHTML = rows;
+  upsertChart('chEff', { type:'line', data:{ datasets:[
+    {label:'Gray sim', data:pts(eta,clean(res.map(r=>r.berG))), borderColor:'#eb6834', backgroundColor:'#eb6834', pointRadius:5, borderWidth:1.5},
+    {label:'Binary sim', data:pts(eta,clean(res.map(r=>r.berB))), borderColor:'#85b7eb', backgroundColor:'#85b7eb', borderDash:[4,3], pointRadius:4, borderWidth:1.2},
+    {label:'Gray theory', data:pts(eta,th), borderColor:'#888780', borderDash:[2,3], pointRadius:0, borderWidth:1}
+  ]}, options: baseOpts('spectral efficiency η (bit/s/Hz)','BER',{ylog:true,ylogmin:1e-5}) });
+  const sh=[]; const sx=[]; for(let e=0.5;e<=6.01;e+=0.1){ sx.push(e); sh.push(10*Math.log10((Math.pow(2,e)-1)/e)); }
+  upsertChart('chReq', { type:'line', data:{ datasets:[
+    {label:'Shannon limit', data:pts(sx,sh), borderColor:'#888780', borderWidth:1.3, pointRadius:0},
+    {label:'Required Eb/N0 for target BER', data:pts(eta,req), borderColor:'#6250d6', backgroundColor:'#6250d6', pointRadius:5, borderWidth:1.5}
+  ]}, options: baseOpts('spectral efficiency η (bit/s/Hz)','Eb/N0 (dB)') });
+  const gap = req.map((r,i)=> r - 10*Math.log10((Math.pow(2,eta[i])-1)/eta[i]));
+  document.getElementById('effInterp').innerHTML = `<b>Observation:</b> at E<sub>b</sub>/N<sub>0</sub> = ${p.eb} dB the BER (Gray, sim) climbs from ${res[0].berG.toExponential(1)} (QPSK, η = ${eta[0].toFixed(1)}) to ${res[3].berG.toExponential(1)} (64-QAM, η = ${eta[3].toFixed(1)}): each extra bit/s/Hz is bought with power. The required E<sub>b</sub>/N<sub>0</sub> for BER = ${p.tber} rises from ${req[0].toFixed(1)} dB to ${req[3].toFixed(1)} dB, tracking the Shannon-limit curve's upward trend but staying ${gap.map(g=>g.toFixed(1)).join(', ')} dB above it (QPSK, 8-PSK, 16-QAM, 64-QAM) — the gap to capacity left for coding. ${p.alpha>0?'The roll-off α>0 reduces η by 1/(1+α) without changing the E<sub>b</sub>/N<sub>0</sub> requirement, sliding each point left.':'With α = 0 (ideal Nyquist filtering) η equals log₂M.'}`;
+}
+
+// ---------- Section 7: mandatory validation ----------
+function plotVal(){
+  let rows = `<table><tr><th>Modulation</th><th>M</th><th>E<sub>s</sub> before (numeric)</th><th>analytic before</th><th>scale 1/√E<sub>s</sub></th><th>E<sub>s</sub> after (numeric)</th><th>d<sub>min</sub> after</th><th>d<sub>min</sub> analytic</th><th>1-bit neighbours: Gray</th><th>binary</th></tr>`;
+  let all = true;
+  MODS.forEach((m,mi)=>{
+    const raw = buildRaw(m), e0 = avgEnergy(raw), e1 = avgEnergy(NORM[mi]);
+    const an0 = m.type==='psk' ? 4 : 2*(m.M-1)/3;
+    const dm = minDist(NORM[mi]), dmA = m.type==='psk' ? 2*Math.sin(Math.PI/m.M) : Math.sqrt(6/(m.M-1));
+    const ok = Math.abs(e1-1)<1e-9 && Math.abs(e0-an0)<1e-9 && Math.abs(dm-dmA)<1e-9; if(!ok) all=false;
+    let nb=0, g1=0, b1=0;
+    for(let i=0;i<m.M;i++) for(let j=i+1;j<m.M;j++){ const d=Math.hypot(NORM[mi][i].re-NORM[mi][j].re, NORM[mi][i].im-NORM[mi][j].im); if(Math.abs(d-dm)<1e-9){ nb++; if(pop(NORM[mi][i].gray^NORM[mi][j].gray)===1) g1++; if(pop(NORM[mi][i].bin^NORM[mi][j].bin)===1) b1++; } }
+    rows += `<tr><td>${m.name}</td><td>${m.M}</td><td>${e0.toFixed(4)}</td><td>${an0.toFixed(4)}</td><td>${(1/Math.sqrt(e0)).toFixed(4)}</td><td class="${Math.abs(e1-1)<1e-9?'ok':'no'}">${e1.toFixed(6)}</td><td>${dm.toFixed(4)}</td><td>${dmA.toFixed(4)}</td><td class="${g1===nb?'ok':'no'}">${g1}/${nb}</td><td class="${b1===nb?'ok':'no'}">${b1}/${nb}</td></tr>`;
+  });
+  rows += `</table>`;
+  document.getElementById('valTable').innerHTML = rows;
+  document.getElementById('valInterp').innerHTML = `<span class="pill ${all?'good':'bad'}">${all?'Every normalized constellation has average energy 1.000000; raw energies and d<sub>min</sub> match the closed forms':'Energy / distance check failed'}</span><br><b>Observation:</b> before normalization the average energies differ widely (PSK on radius 2 gives 4; square QAM on odd integers gives 2(M−1)/3 = 2, 10, 42), so comparing raw BER curves would be meaningless — higher-order QAM would simply be transmitting more power. After scaling by 1/√E<sub>s</sub> every set has E<sub>s</sub> = 1 and the remaining difference between schemes is purely geometric (d<sub>min</sub> shrinks from ${NORM.map(minDist)[0].toFixed(3)} for QPSK to ${NORM.map(minDist)[3].toFixed(3)} for 64-QAM). The last two columns show the Gray property directly: all nearest-neighbour pairs differ in one bit under Gray labeling, but not under natural-binary labeling.`;
+}
+
+function runAll(){
+  const p = getP();
+  plotIdeal(p); plotRecv(p); plotRegions(p); plotCurves(p); plotEff(p); plotVal();
+}
+runAll();
+</script>
+</body>
+</html>
